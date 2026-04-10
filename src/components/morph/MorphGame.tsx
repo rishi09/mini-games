@@ -1,6 +1,6 @@
 "use client";
 
-import { useReducer, useEffect, useCallback, useState } from "react";
+import { useReducer, useEffect, useCallback, useState, useRef } from "react";
 import { getDailySeed, getPuzzleNumber } from "@/lib/daily-seed";
 import { getStats, saveResult, hasPlayedToday } from "@/lib/storage";
 import GameShell from "@/components/shared/GameShell";
@@ -167,7 +167,8 @@ export default function MorphGame() {
   const [practiceSeed] = useState(() => {
     if (typeof window === "undefined") return 0;
     const params = new URLSearchParams(window.location.search);
-    return params.has("seed") ? parseInt(params.get("seed")!, 10) : Date.now();
+    const raw = parseInt(params.get("seed") || "", 10);
+    return Number.isFinite(raw) && raw > 0 ? raw : Date.now();
   });
 
   const seed = isPractice ? practiceSeed : getDailySeed();
@@ -189,11 +190,13 @@ export default function MorphGame() {
   const [shake, setShake] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [sharePuzzleCopied, setSharePuzzleCopied] = useState(false);
+  const savedRef = useRef(false);
 
   // Check if already played today on mount (daily mode only)
   useEffect(() => {
     setMounted(true);
     if (!isPractice && hasPlayedToday(GAME_ID)) {
+      savedRef.current = true;
       const stats = getStats(GAME_ID);
       if (stats.todayResult?.shareText) {
         const chainMatch = stats.todayResult.shareText.match(/\n(.+)$/);
@@ -209,7 +212,8 @@ export default function MorphGame() {
 
   // Save result on win (daily mode only)
   useEffect(() => {
-    if (state.status === "won" && mounted && !isPractice && !state.revealed) {
+    if (state.status === "won" && mounted && !isPractice && !state.revealed && !savedRef.current) {
+      savedRef.current = true;
       const steps = state.chain.length - 1;
       const shareText = buildShareText(puzzleNumber, state.chain, state.par, false);
       saveResult(GAME_ID, steps, shareText, true);

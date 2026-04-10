@@ -61,6 +61,7 @@ export default function StackGame() {
   const [speed, setSpeed] = useState<number>(config.baseSpeed);
   const [status, setStatus] = useState<Status>("ready");
   const [score, setScore] = useState(0);
+  const [runDifficulty, setRunDifficulty] = useState<Difficulty>(difficulty);
   const [perfectCount, setPerfectCount] = useState(0);
   const [perfectFlash, setPerfectFlash] = useState(0);
   const [highScore, setHighScore] = useState(0);
@@ -203,6 +204,8 @@ export default function StackGame() {
 
   const handleDrop = useCallback(() => {
     if (status === "ready") {
+      setSpeed(configRef.current.baseSpeed);
+      setRunDifficulty(difficulty);
       setStatus("playing");
       return;
     }
@@ -272,7 +275,7 @@ export default function StackGame() {
     setDirection(newScore % 2 === 0 ? 1 : -1);
   }, [status]);
 
-  const shareText = `Stack \u{1F3D7}\uFE0F (${config.label}) \u2014 ${score} high!\n${"\u{1F7E7}".repeat(Math.min(score, 20))}`;
+  const shareText = `Stack \u{1F3D7}\uFE0F (${PRESETS[runDifficulty].label}) \u2014 ${score} high!\n${"\u{1F7E7}".repeat(Math.min(score, 20))}`;
 
   const difficultySelector = (
     <div className="flex gap-2 justify-center flex-wrap">

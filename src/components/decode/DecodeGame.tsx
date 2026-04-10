@@ -272,7 +272,8 @@ export default function DecodeGame() {
   const [practiceSeed] = useState(() => {
     if (typeof window === "undefined") return 0;
     const params = new URLSearchParams(window.location.search);
-    return params.has("seed") ? parseInt(params.get("seed")!, 10) : Date.now();
+    const raw = parseInt(params.get("seed") || "", 10);
+    return Number.isFinite(raw) && raw > 0 ? raw : Date.now();
   });
   const seed = isPractice ? practiceSeed : getDailySeed();
   const [state, dispatch] = useReducer(reducer, seed, initState);
