@@ -5,7 +5,7 @@ import StackGame from "@/components/stack/StackGame";
 
 export default function StackPage() {
   return (
-    <GameShell title="Stack" color="#f97316">
+    <GameShell title="Stack" color="#f97316" hideCountdown>
       <StackGame />
     </GameShell>
   );

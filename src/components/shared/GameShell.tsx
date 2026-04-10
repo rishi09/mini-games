@@ -10,6 +10,7 @@ interface GameShellProps {
   puzzleNumber?: number;
   children: React.ReactNode;
   onShowStats?: () => void;
+  hideCountdown?: boolean;
 }
 
 function formatCountdown(ms: number): string {
@@ -27,6 +28,7 @@ export default function GameShell({
   puzzleNumber,
   children,
   onShowStats,
+  hideCountdown,
 }: GameShellProps) {
   const [countdown, setCountdown] = useState("");
 
@@ -99,9 +101,11 @@ export default function GameShell({
         {children}
       </main>
 
-      <footer className="text-center text-xs text-gray-400 py-3 border-t border-gray-100">
-        Next puzzle in {countdown}
-      </footer>
+      {!hideCountdown && (
+        <footer className="text-center text-xs text-gray-400 py-3 border-t border-gray-100">
+          Next puzzle in {countdown}
+        </footer>
+      )}
     </div>
   );
 }

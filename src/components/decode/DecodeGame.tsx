@@ -350,7 +350,7 @@ export default function DecodeGame() {
       </div>
 
       {/* Cipher text display */}
-      <div className="flex-1 flex flex-col items-center justify-center w-full pb-4">
+      <div className="flex-1 flex flex-col items-center justify-start w-full pb-4 pt-2">
         <CipherText
           originalQuote={state.originalQuote}
           cipherMap={state.cipherMap}
