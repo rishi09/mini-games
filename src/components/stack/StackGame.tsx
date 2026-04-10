@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import StackCanvas from "./StackCanvas";
 import ShareButton from "@/components/shared/ShareButton";
 import { saveHighScore, getHighScore } from "@/lib/storage";
@@ -14,10 +15,17 @@ interface Layer {
 type Status = "ready" | "playing" | "ended";
 
 const GAME_WIDTH = 400;
-const BASE_SPEED = 2;
-const SPEED_INCREMENT = 0.15;
-const MAX_SPEED = 6;
-const PERFECT_TOLERANCE = 2;
+
+const PRESETS = {
+  easy: { baseSpeed: 1.5, speedIncrement: 0.1, maxSpeed: 4, perfectTolerance: 4, label: "Easy" },
+  normal: { baseSpeed: 2, speedIncrement: 0.15, maxSpeed: 6, perfectTolerance: 2, label: "Normal" },
+  hard: { baseSpeed: 3, speedIncrement: 0.2, maxSpeed: 8, perfectTolerance: 1, label: "Hard" },
+  insane: { baseSpeed: 4, speedIncrement: 0.3, maxSpeed: 10, perfectTolerance: 0.5, label: "Insane" },
+} as const;
+
+type Difficulty = keyof typeof PRESETS;
+
+const DIFFICULTY_KEYS: Difficulty[] = ["easy", "normal", "hard", "insane"];
 
 function layerColor(index: number): string {
   return `hsl(${(index * 25) % 360}, 70%, 60%)`;
@@ -32,12 +40,25 @@ function createSpawnLayer(width: number, index: number): Layer {
 }
 
 export default function StackGame() {
+  // Difficulty from URL param or default
+  const searchParams = useSearchParams();
+  const initialDifficulty = (() => {
+    const d = searchParams.get("d");
+    if (d && d in PRESETS) return d as Difficulty;
+    return "normal" as Difficulty;
+  })();
+
+  const [difficulty, setDifficulty] = useState<Difficulty>(initialDifficulty);
+  const config = PRESETS[difficulty];
+  const configRef = useRef(config);
+  configRef.current = config;
+
   const [layers, setLayers] = useState<Layer[]>([createBaseLayer()]);
   const [current, setCurrent] = useState<Layer | null>(
     createSpawnLayer(GAME_WIDTH, 1)
   );
   const [direction, setDirection] = useState<1 | -1>(1);
-  const [speed, setSpeed] = useState(BASE_SPEED);
+  const [speed, setSpeed] = useState<number>(config.baseSpeed);
   const [status, setStatus] = useState<Status>("ready");
   const [score, setScore] = useState(0);
   const [perfectCount, setPerfectCount] = useState(0);
@@ -171,7 +192,7 @@ export default function StackGame() {
     setLayers([base]);
     setCurrent(spawn);
     setDirection(1);
-    setSpeed(BASE_SPEED);
+    setSpeed(configRef.current.baseSpeed);
     setScore(0);
     setPerfectCount(0);
     setPerfectFlash(0);
@@ -211,7 +232,7 @@ export default function StackGame() {
     // Check for perfect alignment
     const xDiff = Math.abs(cur.x - topLayer.x);
     const widthDiff = Math.abs(cur.width - topLayer.width);
-    const isPerfect = xDiff <= PERFECT_TOLERANCE && widthDiff <= PERFECT_TOLERANCE;
+    const isPerfect = xDiff <= configRef.current.perfectTolerance && widthDiff <= configRef.current.perfectTolerance;
 
     let settledLayer: Layer;
     const newIndex = currentLayers.length;
@@ -238,7 +259,7 @@ export default function StackGame() {
 
     const newLayers = [...currentLayers, settledLayer];
     const newScore = newLayers.length - 1; // -1 for base
-    const newSpeed = Math.min(BASE_SPEED + SPEED_INCREMENT * newScore, MAX_SPEED);
+    const newSpeed = Math.min(configRef.current.baseSpeed + configRef.current.speedIncrement * newScore, configRef.current.maxSpeed);
 
     setLayers(newLayers);
     setScore(newScore);
@@ -251,10 +272,35 @@ export default function StackGame() {
     setDirection(newScore % 2 === 0 ? 1 : -1);
   }, [status]);
 
-  const shareText = `Stack \u{1F3D7}\uFE0F \u2014 ${score} high!\n${"\u{1F7E7}".repeat(Math.min(score, 20))}`;
+  const shareText = `Stack \u{1F3D7}\uFE0F (${config.label}) \u2014 ${score} high!\n${"\u{1F7E7}".repeat(Math.min(score, 20))}`;
+
+  const difficultySelector = (
+    <div className="flex gap-2 justify-center flex-wrap">
+      {DIFFICULTY_KEYS.map((key) => (
+        <button
+          key={key}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            setDifficulty(key);
+          }}
+          className={`px-4 py-2 rounded-full text-sm font-medium transition-all active:scale-95 min-h-[48px] ${
+            difficulty === key
+              ? "bg-orange-500 text-white"
+              : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+          }`}
+        >
+          {PRESETS[key].label}
+        </button>
+      ))}
+    </div>
+  );
 
   return (
     <div className="flex flex-col items-center w-full flex-1 gap-3">
+      {status === "ready" && (
+        <div className="pb-1">{difficultySelector}</div>
+      )}
+
       <div
         ref={containerRef}
         className="relative w-full flex-1 rounded-xl overflow-hidden cursor-pointer select-none"
@@ -280,10 +326,11 @@ export default function StackGame() {
               e.stopPropagation();
               resetGame();
             }}
-            className="px-6 py-3 rounded-full bg-orange-500 text-white font-semibold text-sm transition-all active:scale-95"
+            className="px-6 py-3 rounded-full bg-orange-500 text-white font-semibold text-sm transition-all active:scale-95 min-h-[48px]"
           >
             Play Again
           </button>
+          {difficultySelector}
           <ShareButton text={shareText} color="#f97316" />
         </div>
       )}

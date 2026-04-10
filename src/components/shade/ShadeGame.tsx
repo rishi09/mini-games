@@ -28,6 +28,7 @@ interface ShadeState {
   startTime: number;
   elapsed: number;
   label: string;
+  revealed: boolean;
 }
 
 type ShadeAction =
@@ -36,7 +37,9 @@ type ShadeAction =
   | { type: "DRAG_END" }
   | { type: "TOGGLE_MODE" }
   | { type: "TICK" }
-  | { type: "RESTORE_WON"; elapsed: number };
+  | { type: "RESTORE_WON"; elapsed: number }
+  | { type: "RESET" }
+  | { type: "SHOW_ANSWER" };
 
 interface DragState {
   action: CellState;
@@ -45,8 +48,7 @@ interface DragState {
 
 let dragState: DragState | null = null;
 
-function createInitialState(): ShadeState {
-  const seed = getDailySeed();
+function createInitialState(seed: number): ShadeState {
   const puzzleIndex = seed % puzzles.length;
   const puzzle = puzzles[puzzleIndex];
   const { rowClues, colClues } = computeClues(puzzle.grid);
@@ -64,6 +66,7 @@ function createInitialState(): ShadeState {
     startTime: Date.now(),
     elapsed: 0,
     label: puzzle.label,
+    revealed: false,
   };
 }
 
@@ -131,7 +134,6 @@ function reducer(state: ShadeState, action: ShadeAction): ShadeState {
       };
     }
     case "RESTORE_WON": {
-      // Restore completed state
       const newGrid = state.solution.map((row) =>
         row.map((cell) => (cell === 1 ? "shaded" : "empty") as CellState)
       );
@@ -140,6 +142,28 @@ function reducer(state: ShadeState, action: ShadeAction): ShadeState {
         grid: newGrid,
         status: "won",
         elapsed: action.elapsed,
+      };
+    }
+    case "RESET": {
+      if (state.status === "won") return state;
+      const size = state.solution.length;
+      return {
+        ...state,
+        grid: Array.from({ length: size }, () =>
+          Array.from({ length: size }, () => "empty" as CellState)
+        ),
+      };
+    }
+    case "SHOW_ANSWER": {
+      if (state.status === "won") return state;
+      const revealedGrid = state.solution.map((row) =>
+        row.map((cell) => (cell === 1 ? "shaded" : "empty") as CellState)
+      );
+      return {
+        ...state,
+        grid: revealedGrid,
+        status: "won",
+        revealed: true,
       };
     }
     default:
@@ -156,25 +180,40 @@ function formatTime(seconds: number): string {
 function buildShareText(
   puzzleNumber: number,
   elapsed: number,
-  solution: number[][]
+  solution: number[][],
+  isPractice: boolean
 ): string {
   const time = formatTime(elapsed);
+  const header = isPractice ? "Shade Practice" : `Shade #${puzzleNumber}`;
   const emojiGrid = solution
     .map((row) => row.map((cell) => (cell === 1 ? "\u2B1B" : "\u2B1C")).join(""))
     .join("\n");
-  return `Shade #${puzzleNumber} \u2014 ${time}\n${emojiGrid}`;
+  return `${header} \u2014 ${time}\n${emojiGrid}`;
 }
 
 export default function ShadeGame() {
+  const [isPractice] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return new URLSearchParams(window.location.search).has("p");
+  });
+  const [practiceSeed] = useState(() => {
+    if (typeof window === "undefined") return 0;
+    const params = new URLSearchParams(window.location.search);
+    return params.has("seed") ? parseInt(params.get("seed")!, 10) : Date.now();
+  });
+
+  const seed = isPractice ? practiceSeed : getDailySeed();
   const puzzleNumber = getPuzzleNumber();
-  const [state, dispatch] = useReducer(reducer, undefined, createInitialState);
+  const [state, dispatch] = useReducer(reducer, seed, createInitialState);
   const [showStats, setShowStats] = useState(false);
   const [stats, setStats] = useState<GameStats | null>(null);
   const [shareText, setShareText] = useState("");
+  const [copiedShareLink, setCopiedShareLink] = useState(false);
   const savedRef = useRef(false);
 
-  // Check if already played today on mount
+  // Check if already played today on mount (daily mode only)
   useEffect(() => {
+    if (isPractice) return;
     if (hasPlayedToday(GAME_ID)) {
       const existingStats = getStats(GAME_ID);
       if (existingStats.todayResult) {
@@ -186,7 +225,7 @@ export default function ShadeGame() {
         savedRef.current = true;
       }
     }
-  }, []);
+  }, [isPractice]);
 
   // Timer
   useEffect(() => {
@@ -195,15 +234,17 @@ export default function ShadeGame() {
     return () => clearInterval(interval);
   }, [state.status]);
 
-  // Save result on win
+  // Save result on win (daily mode only)
   useEffect(() => {
     if (state.status === "won" && !savedRef.current) {
       savedRef.current = true;
-      const text = buildShareText(puzzleNumber, state.elapsed, state.solution);
+      const text = buildShareText(puzzleNumber, state.elapsed, state.solution, isPractice);
       setShareText(text);
-      saveResult(GAME_ID, state.elapsed, text, true);
+      if (!isPractice && !state.revealed) {
+        saveResult(GAME_ID, state.elapsed, text, true);
+      }
     }
-  }, [state.status, state.elapsed, state.solution, puzzleNumber]);
+  }, [state.status, state.elapsed, state.solution, puzzleNumber, isPractice]);
 
   const handleShowStats = useCallback(() => {
     setStats(getStats(GAME_ID));
@@ -229,7 +270,8 @@ export default function ShadeGame() {
     <GameShell
       title="Shade"
       color={SHADE_COLOR}
-      puzzleNumber={puzzleNumber}
+      practiceMode={isPractice}
+      puzzleNumber={isPractice ? undefined : puzzleNumber}
       onShowStats={handleShowStats}
     >
       {/* Timer */}
@@ -252,54 +294,70 @@ export default function ShadeGame() {
         onDragEnd={handleDragEnd}
       />
 
-      {/* Mode toggle */}
+      {/* Mode toggle + Reset/Give Up */}
       {state.status === "playing" && (
-        <div className="flex items-center gap-3 mt-6">
-          <button
-            onClick={() => dispatch({ type: "TOGGLE_MODE" })}
-            className={`
-              flex items-center gap-2 px-5 py-2.5 rounded-full font-semibold text-sm
-              transition-all active:scale-95
-              ${
-                state.mode === "shade"
-                  ? "bg-[#8b5cf6] text-white"
-                  : "bg-gray-200 text-gray-600"
-              }
-            `}
-          >
-            <div
-              className={`w-4 h-4 rounded-sm ${
-                state.mode === "shade" ? "bg-white/30" : "bg-gray-400"
-              }`}
-            />
-            Shade
-          </button>
-          <button
-            onClick={() => dispatch({ type: "TOGGLE_MODE" })}
-            className={`
-              flex items-center gap-2 px-5 py-2.5 rounded-full font-semibold text-sm
-              transition-all active:scale-95
-              ${
-                state.mode === "mark"
-                  ? "bg-[#8b5cf6] text-white"
-                  : "bg-gray-200 text-gray-600"
-              }
-            `}
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
+        <div className="flex flex-col items-center gap-3 mt-6">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => dispatch({ type: "TOGGLE_MODE" })}
+              className={`
+                flex items-center gap-2 px-5 py-2.5 rounded-full font-semibold text-sm
+                transition-all active:scale-95
+                ${
+                  state.mode === "shade"
+                    ? "bg-[#8b5cf6] text-white"
+                    : "bg-gray-200 text-gray-600"
+                }
+              `}
             >
-              <path d="M4 4L12 12" />
-              <path d="M12 4L4 12" />
-            </svg>
-            Mark
-          </button>
+              <div
+                className={`w-4 h-4 rounded-sm ${
+                  state.mode === "shade" ? "bg-white/30" : "bg-gray-400"
+                }`}
+              />
+              Shade
+            </button>
+            <button
+              onClick={() => dispatch({ type: "TOGGLE_MODE" })}
+              className={`
+                flex items-center gap-2 px-5 py-2.5 rounded-full font-semibold text-sm
+                transition-all active:scale-95
+                ${
+                  state.mode === "mark"
+                    ? "bg-[#8b5cf6] text-white"
+                    : "bg-gray-200 text-gray-600"
+                }
+              `}
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+              >
+                <path d="M4 4L12 12" />
+                <path d="M12 4L4 12" />
+              </svg>
+              Mark
+            </button>
+          </div>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => dispatch({ type: "RESET" })}
+              className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              Reset
+            </button>
+            <button
+              onClick={() => dispatch({ type: "SHOW_ANSWER" })}
+              className="text-xs text-gray-400 hover:text-red-500 transition-colors"
+            >
+              Give Up
+            </button>
+          </div>
         </div>
       )}
 
@@ -309,10 +367,41 @@ export default function ShadeGame() {
           <div className="text-center">
             <p className="text-2xl font-bold text-gray-800">{state.label}</p>
             <p className="text-sm text-gray-500 mt-1">
-              Solved in {formatTime(state.elapsed)}
+              {state.revealed ? "Answer revealed" : `Solved in ${formatTime(state.elapsed)}`}
             </p>
           </div>
           <ShareButton text={shareText} color={SHADE_COLOR} />
+          {isPractice ? (
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(window.location.href);
+                  setCopiedShareLink(true);
+                  setTimeout(() => setCopiedShareLink(false), 2000);
+                }}
+                className="px-5 py-2.5 rounded-full border border-violet-500 text-violet-600 font-medium text-sm transition-all active:scale-95"
+              >
+                {copiedShareLink ? "Copied!" : "Share Puzzle"}
+              </button>
+              <button
+                onClick={() => {
+                  window.location.href = `${window.location.pathname}?p=1&seed=${Date.now()}`;
+                }}
+                className="px-5 py-2.5 rounded-full bg-violet-500 text-white font-semibold text-sm transition-all active:scale-95"
+              >
+                New Puzzle
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => {
+                window.location.href = `${window.location.pathname}?p=1`;
+              }}
+              className="px-5 py-2.5 rounded-full bg-gray-100 text-gray-600 font-medium text-sm transition-all active:scale-95 hover:bg-gray-200"
+            >
+              Practice Mode
+            </button>
+          )}
         </div>
       )}
 

@@ -8,6 +8,7 @@ interface GameShellProps {
   title: string;
   color: string;
   puzzleNumber?: number;
+  practiceMode?: boolean;
   children: React.ReactNode;
   onShowStats?: () => void;
   hideCountdown?: boolean;
@@ -26,6 +27,7 @@ export default function GameShell({
   title,
   color,
   puzzleNumber,
+  practiceMode,
   children,
   onShowStats,
   hideCountdown,
@@ -66,9 +68,11 @@ export default function GameShell({
           <h1 className="text-lg font-bold" style={{ color }}>
             {title}
           </h1>
-          {puzzleNumber && (
+          {practiceMode ? (
+            <span className="text-xs text-emerald-500 font-medium">Practice</span>
+          ) : puzzleNumber ? (
             <span className="text-xs text-gray-400">#{puzzleNumber}</span>
-          )}
+          ) : null}
         </div>
 
         {onShowStats ? (
@@ -101,7 +105,7 @@ export default function GameShell({
         {children}
       </main>
 
-      {!hideCountdown && (
+      {!hideCountdown && !practiceMode && (
         <footer className="text-center text-xs text-gray-400 py-3 border-t border-gray-100">
           Next puzzle in {countdown}
         </footer>

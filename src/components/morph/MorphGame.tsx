@@ -23,13 +23,16 @@ interface MorphState {
   status: "playing" | "won";
   par: number;
   error?: string;
+  revealed: boolean;
 }
 
 type MorphAction =
   | { type: "SET_INPUT"; value: string }
   | { type: "SUBMIT" }
   | { type: "CLEAR_ERROR" }
-  | { type: "RESTORE"; chain: string[] };
+  | { type: "RESTORE"; chain: string[] }
+  | { type: "RESET" }
+  | { type: "SHOW_ANSWER"; solution: string[] };
 
 function diffByOne(a: string, b: string): boolean {
   let diffs = 0;
@@ -37,6 +40,29 @@ function diffByOne(a: string, b: string): boolean {
     if (a[i] !== b[i]) diffs++;
   }
   return diffs === 1;
+}
+
+function findPath(start: string, target: string): string[] | null {
+  if (start === target) return [start];
+  const queue: string[][] = [[start]];
+  const visited = new Set<string>([start]);
+  while (queue.length > 0) {
+    const path = queue.shift()!;
+    const last = path[path.length - 1];
+    for (let i = 0; i < last.length; i++) {
+      for (let c = 65; c <= 90; c++) {
+        const ch = String.fromCharCode(c);
+        if (ch === last[i]) continue;
+        const neighbor = last.slice(0, i) + ch + last.slice(i + 1);
+        if (!wordSet.has(neighbor) || visited.has(neighbor)) continue;
+        const newPath = [...path, neighbor];
+        if (neighbor === target) return newPath;
+        visited.add(neighbor);
+        queue.push(newPath);
+      }
+    }
+  }
+  return null;
 }
 
 function createReducer(par: number) {
@@ -92,6 +118,27 @@ function createReducer(par: number) {
         };
       }
 
+      case "RESET": {
+        if (state.status === "won") return state;
+        return {
+          ...state,
+          chain: [state.startWord],
+          currentInput: "",
+          error: undefined,
+        };
+      }
+
+      case "SHOW_ANSWER": {
+        return {
+          ...state,
+          chain: action.solution,
+          status: "won",
+          currentInput: "",
+          error: undefined,
+          revealed: true,
+        };
+      }
+
       default:
         return state;
     }
@@ -101,17 +148,29 @@ function createReducer(par: number) {
 function buildShareText(
   puzzleNumber: number,
   chain: string[],
-  par: number
+  par: number,
+  isPractice: boolean
 ): string {
   const steps = chain.length - 1;
   const chainText = chain.join(" → ");
   const rating =
     steps <= par ? " (Par!)" : steps <= par + 2 ? "" : " (Keep practicing!)";
-  return `Morph #${puzzleNumber} — ${steps} steps${rating}\n${chainText}`;
+  const label = isPractice ? "Morph Practice" : `Morph #${puzzleNumber}`;
+  return `${label} — ${steps} steps${rating}\n${chainText}`;
 }
 
 export default function MorphGame() {
-  const seed = getDailySeed();
+  const [isPractice] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return new URLSearchParams(window.location.search).has("p");
+  });
+  const [practiceSeed] = useState(() => {
+    if (typeof window === "undefined") return 0;
+    const params = new URLSearchParams(window.location.search);
+    return params.has("seed") ? parseInt(params.get("seed")!, 10) : Date.now();
+  });
+
+  const seed = isPractice ? practiceSeed : getDailySeed();
   const puzzleIndex = seed % puzzles.length;
   const puzzle = puzzles[puzzleIndex];
   const puzzleNumber = getPuzzleNumber();
@@ -123,19 +182,20 @@ export default function MorphGame() {
     currentInput: "",
     status: "playing" as const,
     par: puzzle.par,
+    revealed: false,
   });
 
   const [showStats, setShowStats] = useState(false);
   const [shake, setShake] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [sharePuzzleCopied, setSharePuzzleCopied] = useState(false);
 
-  // Check if already played today on mount
+  // Check if already played today on mount (daily mode only)
   useEffect(() => {
     setMounted(true);
-    if (hasPlayedToday(GAME_ID)) {
+    if (!isPractice && hasPlayedToday(GAME_ID)) {
       const stats = getStats(GAME_ID);
       if (stats.todayResult?.shareText) {
-        // Parse the chain from the share text
         const chainMatch = stats.todayResult.shareText.match(/\n(.+)$/);
         if (chainMatch) {
           const savedChain = chainMatch[1].split(" → ").map((w: string) => w.trim());
@@ -145,16 +205,16 @@ export default function MorphGame() {
         }
       }
     }
-  }, [puzzle.start]);
+  }, [puzzle.start, isPractice]);
 
-  // Save result on win
+  // Save result on win (daily mode only)
   useEffect(() => {
-    if (state.status === "won" && mounted) {
+    if (state.status === "won" && mounted && !isPractice && !state.revealed) {
       const steps = state.chain.length - 1;
-      const shareText = buildShareText(puzzleNumber, state.chain, state.par);
+      const shareText = buildShareText(puzzleNumber, state.chain, state.par, false);
       saveResult(GAME_ID, steps, shareText, true);
     }
-  }, [state.status, state.chain, mounted, puzzleNumber, state.par]);
+  }, [state.status, state.chain, mounted, puzzleNumber, state.par, isPractice]);
 
   // Auto-clear errors
   useEffect(() => {
@@ -180,13 +240,28 @@ export default function MorphGame() {
     }
   }, [state.chain, state.status]);
 
+  const handleGiveUp = useCallback(() => {
+    const solution = findPath(state.startWord, state.targetWord);
+    if (solution) {
+      dispatch({ type: "SHOW_ANSWER", solution });
+    }
+  }, [state.startWord, state.targetWord]);
+
+  const handleSharePuzzle = useCallback(() => {
+    const url = window.location.href;
+    navigator.clipboard.writeText(url).then(() => {
+      setSharePuzzleCopied(true);
+      setTimeout(() => setSharePuzzleCopied(false), 2000);
+    });
+  }, []);
+
   const steps = state.chain.length - 1;
   const stats = mounted ? getStats(GAME_ID) : null;
-  const shareText = buildShareText(puzzleNumber, state.chain, state.par);
+  const shareText = buildShareText(puzzleNumber, state.chain, state.par, isPractice);
 
   if (!mounted) {
     return (
-      <GameShell title="Morph" color={MORPH_COLOR} puzzleNumber={puzzleNumber}>
+      <GameShell title="Morph" color={MORPH_COLOR} practiceMode={isPractice} puzzleNumber={isPractice ? undefined : puzzleNumber}>
         <div className="flex-1 flex items-center justify-center text-gray-400">
           Loading...
         </div>
@@ -198,8 +273,9 @@ export default function MorphGame() {
     <GameShell
       title="Morph"
       color={MORPH_COLOR}
-      puzzleNumber={puzzleNumber}
-      onShowStats={() => setShowStats(true)}
+      practiceMode={isPractice}
+      puzzleNumber={isPractice ? undefined : puzzleNumber}
+      onShowStats={isPractice ? undefined : () => setShowStats(true)}
     >
       {/* Par info */}
       <div className="text-center mb-4">
@@ -260,26 +336,70 @@ export default function MorphGame() {
             shake={shake}
           />
           {state.chain.length > 1 && (
-            <button
-              onClick={handleUndo}
-              className="text-xs text-gray-400 hover:text-gray-600 transition-colors mt-1"
-            >
-              Undo last word
-            </button>
+            <div className="flex items-center gap-4 mt-1">
+              <button
+                onClick={handleUndo}
+                className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                Undo
+              </button>
+              <button
+                onClick={() => dispatch({ type: "RESET" })}
+                className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                Reset
+              </button>
+              <button
+                onClick={handleGiveUp}
+                className="text-xs text-gray-400 hover:text-red-500 transition-colors"
+              >
+                Give Up
+              </button>
+            </div>
           )}
         </div>
       ) : (
         <div className="flex flex-col items-center gap-4 py-4 animate-slide-up">
           <div className="text-center">
             <p className="text-lg font-bold text-gray-800">
-              {steps <= state.par ? "Brilliant!" : steps <= state.par + 2 ? "Well done!" : "You made it!"}
+              {state.revealed ? "Solution" : steps <= state.par ? "Brilliant!" : steps <= state.par + 2 ? "Well done!" : "You made it!"}
             </p>
             <p className="text-sm text-gray-500 mt-1">
-              You morphed {state.startWord} into {state.targetWord} in {steps}{" "}
-              {steps === 1 ? "step" : "steps"}
+              {state.revealed
+                ? `${state.startWord} → ${state.targetWord} in ${steps} steps (par: ${state.par})`
+                : `You morphed ${state.startWord} into ${state.targetWord} in ${steps} ${steps === 1 ? "step" : "steps"}`}
             </p>
           </div>
           <ShareButton text={shareText} color={MORPH_COLOR} />
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            {isPractice ? (
+              <>
+                <button
+                  onClick={handleSharePuzzle}
+                  className="px-5 py-2.5 rounded-full border border-cyan-500 text-cyan-600 font-medium text-sm transition-all active:scale-95"
+                >
+                  {sharePuzzleCopied ? "Copied!" : "Share Puzzle"}
+                </button>
+                <button
+                  onClick={() => {
+                    window.location.href = `${window.location.pathname}?p=1&seed=${Date.now()}`;
+                  }}
+                  className="px-5 py-2.5 rounded-full bg-cyan-500 text-white font-semibold text-sm transition-all active:scale-95"
+                >
+                  New Puzzle
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => {
+                  window.location.href = `${window.location.pathname}?p=1`;
+                }}
+                className="px-5 py-2.5 rounded-full bg-gray-100 text-gray-600 font-medium text-sm transition-all active:scale-95 hover:bg-gray-200"
+              >
+                Practice Mode
+              </button>
+            )}
+          </div>
         </div>
       )}
 

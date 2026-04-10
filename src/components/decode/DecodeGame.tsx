@@ -26,6 +26,7 @@ interface DecodeState {
   startTime: number;
   hintsUsed: number;
   elapsedMs: number;
+  revealed: boolean;
 }
 
 type DecodeAction =
@@ -34,7 +35,9 @@ type DecodeAction =
   | { type: "CLEAR_SELECTED" }
   | { type: "HINT"; rng: () => number }
   | { type: "TICK"; now: number }
-  | { type: "RESTORE"; guesses: Record<string, string>; hintsUsed: number; elapsedMs: number };
+  | { type: "RESTORE"; guesses: Record<string, string>; hintsUsed: number; elapsedMs: number }
+  | { type: "RESET" }
+  | { type: "SHOW_ANSWER" };
 
 function generateCipherMap(rng: () => number): Record<string, string> {
   const shuffled = shuffle(ALPHABET, rng);
@@ -175,6 +178,32 @@ function reducer(state: DecodeState, action: DecodeAction): DecodeState {
       };
     }
 
+    case "RESET": {
+      if (state.status === "won") return state;
+      return {
+        ...state,
+        guesses: {},
+        selectedCipher: null,
+      };
+    }
+
+    case "SHOW_ANSWER": {
+      if (state.status === "won") return state;
+      const correctGuesses: Record<string, string> = {};
+      const uniqueLetters = getUniqueLetters(state.originalQuote);
+      for (const plain of uniqueLetters) {
+        const cipher = state.cipherMap[plain];
+        correctGuesses[cipher] = plain;
+      }
+      return {
+        ...state,
+        guesses: correctGuesses,
+        status: "won",
+        selectedCipher: null,
+        revealed: true,
+      };
+    }
+
     default:
       return state;
   }
@@ -191,18 +220,23 @@ function buildShareText(
   puzzleNumber: number,
   elapsedMs: number,
   originalQuote: string,
-  author: string
+  author: string,
+  isPractice: boolean = false
 ): string {
   const time = formatTime(elapsedMs);
   const preview =
     originalQuote.length > 30
       ? originalQuote.slice(0, 30) + "..."
       : originalQuote;
-  return `Decode #${puzzleNumber} \u2014 ${time} \uD83D\uDC9A\n"${preview}" \u2014 ${author}`;
+  const header = isPractice ? "Decode Practice" : `Decode #${puzzleNumber}`;
+  let text = `${header} \u2014 ${time} \uD83D\uDC9A\n"${preview}" \u2014 ${author}`;
+  if (isPractice && typeof window !== "undefined") {
+    text += `\n${window.location.href}`;
+  }
+  return text;
 }
 
-function initState(): DecodeState {
-  const seed = getDailySeed();
+function initState(seed: number): DecodeState {
   const quoteIndex = seed % quotes.length;
   const quote = quotes[quoteIndex];
 
@@ -225,18 +259,31 @@ function initState(): DecodeState {
     startTime: Date.now(),
     hintsUsed: 0,
     elapsedMs: 0,
+    revealed: false,
   };
 }
 
 export default function DecodeGame() {
   const puzzleNumber = getPuzzleNumber();
-  const [state, dispatch] = useReducer(reducer, undefined, initState);
+  const [isPractice] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return new URLSearchParams(window.location.search).has("p");
+  });
+  const [practiceSeed] = useState(() => {
+    if (typeof window === "undefined") return 0;
+    const params = new URLSearchParams(window.location.search);
+    return params.has("seed") ? parseInt(params.get("seed")!, 10) : Date.now();
+  });
+  const seed = isPractice ? practiceSeed : getDailySeed();
+  const [state, dispatch] = useReducer(reducer, seed, initState);
   const [showStats, setShowStats] = useState(false);
   const [alreadyPlayed, setAlreadyPlayed] = useState(false);
   const [hintRng] = useState(() => createRng(Date.now()));
+  const [copiedPuzzle, setCopiedPuzzle] = useState(false);
 
-  // Check if already played today
+  // Check if already played today (daily mode only)
   useEffect(() => {
+    if (isPractice) return;
     if (hasPlayedToday(GAME_ID)) {
       const stats = getStats(GAME_ID);
       if (stats.todayResult) {
@@ -269,19 +316,21 @@ export default function DecodeGame() {
     return () => clearInterval(interval);
   }, [state.status, alreadyPlayed]);
 
-  // Save result when won
+  // Save result when won (daily mode only)
   useEffect(() => {
-    if (state.status === "won" && !alreadyPlayed) {
+    if (isPractice) return;
+    if (state.status === "won" && !alreadyPlayed && !state.revealed) {
       const shareText = buildShareText(
         puzzleNumber,
         state.elapsedMs,
         state.originalQuote,
-        state.author
+        state.author,
+        false
       );
       const score = Math.floor(state.elapsedMs / 1000);
       saveResult(GAME_ID, score, shareText, true);
     }
-  }, [state.status, alreadyPlayed, puzzleNumber, state.elapsedMs, state.originalQuote, state.author]);
+  }, [state.status, alreadyPlayed, isPractice, puzzleNumber, state.elapsedMs, state.originalQuote, state.author]);
 
   const handleSelectCipher = useCallback((letter: string) => {
     dispatch({ type: "SELECT_CIPHER", letter });
@@ -318,11 +367,22 @@ export default function DecodeGame() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [state.status, state.selectedCipher]);
 
+  const handleNewPuzzle = useCallback(() => {
+    window.location.href = `${window.location.pathname}?p=1&seed=${Date.now()}`;
+  }, []);
+
+  const handleSharePuzzle = useCallback(() => {
+    navigator.clipboard.writeText(window.location.href);
+    setCopiedPuzzle(true);
+    setTimeout(() => setCopiedPuzzle(false), 2000);
+  }, []);
+
   const shareText = buildShareText(
     puzzleNumber,
     state.elapsedMs,
     state.originalQuote,
-    state.author
+    state.author,
+    isPractice
   );
 
   const stats = getStats(GAME_ID);
@@ -331,8 +391,9 @@ export default function DecodeGame() {
     <GameShell
       title="Decode"
       color={GAME_COLOR}
-      puzzleNumber={puzzleNumber}
-      onShowStats={() => setShowStats(true)}
+      puzzleNumber={isPractice ? undefined : puzzleNumber}
+      practiceMode={isPractice}
+      onShowStats={isPractice ? undefined : () => setShowStats(true)}
     >
       {/* Timer */}
       <div className="text-center mb-4">
@@ -340,6 +401,12 @@ export default function DecodeGame() {
           <span className="text-sm font-mono text-gray-500">
             {formatTime(state.elapsedMs)}
           </span>
+        ) : state.revealed ? (
+          <div className="animate-bounce-once">
+            <span className="text-sm font-semibold text-gray-500">
+              Answer revealed
+            </span>
+          </div>
         ) : (
           <div className="animate-bounce-once">
             <span className="text-sm font-semibold text-emerald-600">
@@ -373,10 +440,51 @@ export default function DecodeGame() {
           </div>
         )}
 
+        {/* Reset / Give Up buttons while playing */}
+        {state.status === "playing" && Object.keys(state.guesses).length > 0 && (
+          <div className="mt-3 flex items-center gap-4">
+            <button
+              onClick={() => dispatch({ type: "RESET" })}
+              className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              Reset
+            </button>
+            <button
+              onClick={() => dispatch({ type: "SHOW_ANSWER" })}
+              className="text-xs text-gray-400 hover:text-red-500 transition-colors"
+            >
+              Give Up
+            </button>
+          </div>
+        )}
+
         {/* Win state */}
         {state.status === "won" && (
           <div className="mt-6 flex flex-col items-center gap-3">
             <ShareButton text={shareText} color={GAME_COLOR} />
+            {isPractice ? (
+              <>
+                <button
+                  onClick={handleSharePuzzle}
+                  className="px-5 py-2.5 rounded-full border border-emerald-500 text-emerald-600 font-medium text-sm transition-all active:scale-95"
+                >
+                  {copiedPuzzle ? "Copied!" : "Share Puzzle"}
+                </button>
+                <button
+                  onClick={handleNewPuzzle}
+                  className="px-5 py-2.5 rounded-full bg-emerald-500 text-white font-semibold text-sm transition-all active:scale-95"
+                >
+                  New Puzzle
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={handleNewPuzzle}
+                className="px-5 py-2.5 rounded-full bg-gray-100 text-gray-600 font-medium text-sm transition-all active:scale-95 hover:bg-gray-200"
+              >
+                Practice Mode
+              </button>
+            )}
           </div>
         )}
       </div>
