@@ -1,11 +1,7 @@
-import GameShell from "@/components/shared/GameShell";
+"use client";
+
+import ShadeGame from "@/components/shade/ShadeGame";
 
 export default function ShadePage() {
-  return (
-    <GameShell title="Shade" color="#8b5cf6">
-      <div className="flex-1 flex items-center justify-center text-gray-400">
-        Loading...
-      </div>
-    </GameShell>
-  );
+  return <ShadeGame />;
 }

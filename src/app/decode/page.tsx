@@ -1,11 +1,16 @@
-import GameShell from "@/components/shared/GameShell";
+"use client";
+
+import dynamic from "next/dynamic";
+
+const DecodeGame = dynamic(() => import("@/components/decode/DecodeGame"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex min-h-[100dvh] items-center justify-center text-gray-400">
+      Loading...
+    </div>
+  ),
+});
 
 export default function DecodePage() {
-  return (
-    <GameShell title="Decode" color="#10b981">
-      <div className="flex-1 flex items-center justify-center text-gray-400">
-        Loading...
-      </div>
-    </GameShell>
-  );
+  return <DecodeGame />;
 }

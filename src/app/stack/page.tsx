@@ -1,11 +1,12 @@
+"use client";
+
 import GameShell from "@/components/shared/GameShell";
+import StackGame from "@/components/stack/StackGame";
 
 export default function StackPage() {
   return (
     <GameShell title="Stack" color="#f97316">
-      <div className="flex-1 flex items-center justify-center text-gray-400">
-        Loading...
-      </div>
+      <StackGame />
     </GameShell>
   );
 }
