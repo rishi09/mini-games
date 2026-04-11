@@ -15,6 +15,7 @@ interface Layer {
 type Status = "ready" | "playing" | "ended";
 
 const GAME_WIDTH = 400;
+const INITIAL_BLOCK_WIDTH = 240; // 60% of game width — must be < GAME_WIDTH so blocks can actually slide
 
 const PRESETS = {
   easy: { baseSpeed: 1.5, speedIncrement: 0.1, maxSpeed: 4, perfectTolerance: 4, label: "Easy" },
@@ -32,7 +33,8 @@ function layerColor(index: number): string {
 }
 
 function createBaseLayer(): Layer {
-  return { x: 0, width: GAME_WIDTH, color: layerColor(0) };
+  const x = (GAME_WIDTH - INITIAL_BLOCK_WIDTH) / 2;
+  return { x, width: INITIAL_BLOCK_WIDTH, color: layerColor(0) };
 }
 
 function createSpawnLayer(width: number, index: number): Layer {
@@ -55,7 +57,7 @@ export default function StackGame() {
 
   const [layers, setLayers] = useState<Layer[]>([createBaseLayer()]);
   const [current, setCurrent] = useState<Layer | null>(
-    createSpawnLayer(GAME_WIDTH, 1)
+    createSpawnLayer(INITIAL_BLOCK_WIDTH, 1)
   );
   const [direction, setDirection] = useState<1 | -1>(1);
   const [speed, setSpeed] = useState<number>(config.baseSpeed);
@@ -189,7 +191,7 @@ export default function StackGame() {
 
   const resetGame = useCallback(() => {
     const base = createBaseLayer();
-    const spawn = createSpawnLayer(GAME_WIDTH, 1);
+    const spawn = createSpawnLayer(INITIAL_BLOCK_WIDTH, 1);
     setLayers([base]);
     setCurrent(spawn);
     setDirection(1);
