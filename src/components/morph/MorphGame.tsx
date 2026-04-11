@@ -200,7 +200,7 @@ export default function MorphGame() {
       savedRef.current = true;
       const stats = getStats(GAME_ID);
       if (stats.todayResult?.shareText) {
-        const chainMatch = stats.todayResult.shareText.match(/\n(.+)$/);
+        const chainMatch = stats.todayResult.shareText.match(/\n([A-Z]+(?: → [A-Z]+)+)/);
         if (chainMatch) {
           const savedChain = chainMatch[1].split(" → ").map((w: string) => w.trim());
           if (savedChain.length > 0 && savedChain[0] === puzzle.start) {
