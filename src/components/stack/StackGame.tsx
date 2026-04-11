@@ -275,7 +275,8 @@ export default function StackGame() {
     setDirection(newScore % 2 === 0 ? 1 : -1);
   }, [status]);
 
-  const shareText = `Stack \u{1F3D7}\uFE0F (${PRESETS[runDifficulty].label}) \u2014 ${score} high!\n${"\u{1F7E7}".repeat(Math.min(score, 20))}`;
+  const gameLink = typeof window !== "undefined" ? `\n${window.location.origin}/stack` : "";
+  const shareText = `Stack \u{1F3D7}\uFE0F (${PRESETS[runDifficulty].label}) \u2014 ${score} high!\n${"\u{1F7E7}".repeat(Math.min(score, 20))}${gameLink}`;
 
   const difficultySelector = (
     <div className="flex gap-2 justify-center flex-wrap">

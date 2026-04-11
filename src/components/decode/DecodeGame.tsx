@@ -230,8 +230,8 @@ function buildShareText(
       : originalQuote;
   const header = isPractice ? "Decode Practice" : `Decode #${puzzleNumber}`;
   let text = `${header} \u2014 ${time} \uD83D\uDC9A\n"${preview}" \u2014 ${author}`;
-  if (isPractice && typeof window !== "undefined") {
-    text += `\n${window.location.href}`;
+  if (typeof window !== "undefined") {
+    text += isPractice ? `\n${window.location.href}` : `\n${window.location.origin}/decode`;
   }
   return text;
 }

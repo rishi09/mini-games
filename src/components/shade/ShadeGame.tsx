@@ -188,7 +188,8 @@ function buildShareText(
   const emojiGrid = solution
     .map((row) => row.map((cell) => (cell === 1 ? "\u2B1B" : "\u2B1C")).join(""))
     .join("\n");
-  return `${header} \u2014 ${time}\n${emojiGrid}`;
+  const link = typeof window !== "undefined" ? `\n${window.location.origin}/shade` : "";
+  return `${header} \u2014 ${time}\n${emojiGrid}${link}`;
 }
 
 export default function ShadeGame() {
