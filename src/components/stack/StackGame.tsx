@@ -83,6 +83,8 @@ export default function StackGame() {
   const animFrameRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
   const perfectFlashTimerRef = useRef<number>(0);
+  const difficultyRef = useRef(difficulty);
+  const runDifficultyRef = useRef(runDifficulty);
 
   // Sync refs
   layersRef.current = layers;
@@ -91,11 +93,13 @@ export default function StackGame() {
   speedRef.current = speed;
   statusRef.current = status;
   perfectFlashRef.current = perfectFlash;
+  difficultyRef.current = difficulty;
+  runDifficultyRef.current = runDifficulty;
 
-  // Load high score on mount
+  // Load high score when difficulty changes
   useEffect(() => {
-    setHighScore(getHighScore("stack"));
-  }, []);
+    setHighScore(getHighScore(`stack-${difficulty}`));
+  }, [difficulty]);
 
   // Container resize observer
   useEffect(() => {
@@ -201,13 +205,13 @@ export default function StackGame() {
     setPerfectFlash(0);
     perfectFlashTimerRef.current = 0;
     setStatus("ready");
-    setHighScore(getHighScore("stack"));
+    setHighScore(getHighScore(`stack-${difficultyRef.current}`));
   }, []);
 
   const handleDrop = useCallback(() => {
     if (status === "ready") {
       setSpeed(configRef.current.baseSpeed);
-      setRunDifficulty(difficulty);
+      setRunDifficulty(difficultyRef.current);
       setStatus("playing");
       return;
     }
@@ -229,8 +233,8 @@ export default function StackGame() {
       // Game over
       setStatus("ended");
       const finalScore = currentLayers.length - 1; // -1 for base
-      saveHighScore("stack", finalScore);
-      setHighScore(Math.max(getHighScore("stack"), finalScore));
+      saveHighScore(`stack-${runDifficultyRef.current}`, finalScore);
+      setHighScore(Math.max(getHighScore(`stack-${runDifficultyRef.current}`), finalScore));
       return;
     }
 

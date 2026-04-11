@@ -10,9 +10,13 @@ export async function shareResult(
     // User cancelled or share failed, fall through to clipboard
   }
 
-  if (typeof navigator !== "undefined" && navigator.clipboard) {
-    await navigator.clipboard.writeText(text);
-    return "copied";
+  try {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      await navigator.clipboard.writeText(text);
+      return "copied";
+    }
+  } catch {
+    // Clipboard write failed (e.g. no focus, permissions denied)
   }
 
   return "copied";

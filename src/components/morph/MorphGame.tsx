@@ -156,7 +156,9 @@ function buildShareText(
   const rating =
     steps <= par ? " (Par!)" : steps <= par + 2 ? "" : " (Keep practicing!)";
   const label = isPractice ? "Morph Practice" : `Morph #${puzzleNumber}`;
-  const link = typeof window !== "undefined" ? `\n${window.location.origin}/morph` : "";
+  const link = typeof window !== "undefined"
+    ? isPractice ? `\n${window.location.href}` : `\n${window.location.origin}/morph`
+    : "";
   return `${label} — ${steps} steps${rating}\n${chainText}${link}`;
 }
 

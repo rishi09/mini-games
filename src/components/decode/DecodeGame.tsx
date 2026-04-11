@@ -359,6 +359,7 @@ export default function DecodeGame() {
           dispatch({ type: "ASSIGN_LETTER", letter: key });
         }
       } else if (e.key === "Backspace" || e.key === "Delete") {
+        e.preventDefault(); // prevent browser back-navigation on Backspace
         dispatch({ type: "CLEAR_SELECTED" });
       } else if (e.key === "Escape") {
         dispatch({ type: "SELECT_CIPHER", letter: "" });
