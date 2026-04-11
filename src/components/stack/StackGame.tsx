@@ -37,8 +37,9 @@ function createBaseLayer(): Layer {
   return { x, width: INITIAL_BLOCK_WIDTH, color: layerColor(0) };
 }
 
-function createSpawnLayer(width: number, index: number): Layer {
-  return { x: -width, width, color: layerColor(index) };
+function createSpawnLayer(width: number, index: number, direction: 1 | -1 = 1): Layer {
+  // Spawn off-screen on the correct side so the block enters from that direction
+  return { x: direction === 1 ? -width : GAME_WIDTH, width, color: layerColor(index) };
 }
 
 export default function StackGame() {
@@ -274,11 +275,11 @@ export default function StackGame() {
     setScore(newScore);
     setSpeed(newSpeed);
 
-    // Spawn next block
-    const nextLayer = createSpawnLayer(settledLayer.width, newLayers.length);
+    // Spawn next block from the correct side, alternating each score
+    const nextDir: 1 | -1 = newScore % 2 === 0 ? 1 : -1;
+    const nextLayer = createSpawnLayer(settledLayer.width, newLayers.length, nextDir);
     setCurrent(nextLayer);
-    // Alternate starting direction
-    setDirection(newScore % 2 === 0 ? 1 : -1);
+    setDirection(nextDir);
   }, [status]);
 
   const gameLink = typeof window !== "undefined" ? `\n${window.location.origin}/stack` : "";

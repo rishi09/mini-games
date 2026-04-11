@@ -1,16 +1,16 @@
-export function getDailySeed(): number {
-  const now = new Date();
-  return now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
-}
-
 export function getDayIndex(): number {
   return Math.floor(Date.now() / 86400000);
 }
 
+// Use the same UTC epoch-day as getDayIndex so puzzle selection and
+// hasPlayedToday() always agree on where "today" begins.
+export function getDailySeed(): number {
+  return getDayIndex();
+}
+
 export function getPuzzleNumber(startDate: string = "2026-04-10"): number {
-  const start = new Date(startDate).getTime();
-  const now = new Date().setHours(0, 0, 0, 0);
-  return Math.floor((now - start) / 86400000) + 1;
+  const startEpochDay = Math.floor(new Date(startDate).getTime() / 86400000);
+  return getDayIndex() - startEpochDay + 1;
 }
 
 export function msUntilMidnight(): number {
