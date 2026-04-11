@@ -330,6 +330,20 @@ export default function StackGame() {
         />
       </div>
 
+      {status === "playing" && (
+        <div className="pb-1">
+          <button
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              resetGame();
+            }}
+            className="text-xs text-gray-400 hover:text-gray-600 transition-colors min-h-[44px] px-4"
+          >
+            Restart
+          </button>
+        </div>
+      )}
+
       {status === "ended" && (
         <div className="flex flex-col items-center gap-3 pb-2">
           <button
